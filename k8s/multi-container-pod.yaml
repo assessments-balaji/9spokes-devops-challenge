@@ -1,0 +1,98 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: p3
+  namespace: staging
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: p3
+  minReadySeconds: 30
+  progressDeadlineSeconds: 600
+  template:
+    metadata:
+      labels:
+        app: p3
+        version: v1
+    spec:
+      initContainers:
+      - name: create-empty-file
+        image: alpine
+        command: ["touch", "/app/ready.txt"]
+        volumeMounts:
+        - name: host-path
+          mountPath: /app
+      containers:
+      - name: p3-1
+        image: manojg0521/9spokes-challenge:latest
+        imagePullPolicy: Always
+        ports:
+          - containerPort: 8080
+            name: http
+            protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 8080
+          initialDelaySeconds: 10
+          timeoutSeconds: 5
+          periodSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          exec:
+            command: ["cat", "/app/ready.txt"]
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          successThreshold: 3
+        volumeMounts:
+        - name: host-path
+          mountPath: /app
+      - name: p3-2
+        image: nginx:latest
+        imagePullPolicy: Always
+        ports:
+          - containerPort: 80
+            name: http
+            protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 10
+          timeoutSeconds: 5
+          periodSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 10
+          timeoutSeconds: 5
+          periodSeconds: 10
+          failureThreshold: 3
+      volumes:
+      - name: host-path
+        hostPath:
+          path: /tmp/
+          type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: hello-p3
+  name: hello-p3
+  namespace: staging
+spec:
+  ports:
+  - port: 80
+    name: http
+    targetPort: 8080
+  - port: 443
+    name: https
+    targetPort: 8080
+  selector:
+    app: p3
+  sessionAffinity: None
+  type: LoadBalancer
